@@ -1,105 +1,106 @@
 const { Client, RichEmbed , Attachment } = require('discord.js');
+const https = require('https');
+const ytdl = require('ytdl-core');
 const client = new Client();
 
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
 });
 
-// command to roll dice
 client.on('message', message => {
-  if (message.content === '!roll') {
-    var num1 = Math.floor(Math.random()*6) + 1;
-    var num2 = Math.floor(Math.random()*6) + 1;
+  const command = message.content;
+  let queue = [];
+
+  // command to roll dice
+  if (command === '!roll') {
+    let num1 = Math.floor(Math.random()*6) + 1;
+    let num2 = Math.floor(Math.random()*6) + 1;
     message.channel.send(printDiceRoll(num1, num2));
     message.channel.send(num1 + num2);
   }
-});
 
-// command to flip coin
-client.on('message', message => {
-  if (message.content === '!flip') {
-    var flip = Math.floor(Math.random()*2);
-    var result = (flip == 1) ? "Heads" : "Tails";
+  // command to flip coin
+  if (command === '!flip') {
+    let flip = Math.floor(Math.random()*2);
+    let result = (flip == 1) ? "Heads" : "Tails";
     message.channel.send(result);
   }
-});
 
-const https = require('https');
-const ytdl = require('ytdl-core');
-const streamOptions = { seek: 0, volume: 1 };
-// play audio command
-client.on('message', message => {
-  // Voice only works in guilds, if the message does not come from a guild,
-  // we ignore it
-  if (!message.guild) return;
-
-  if (message.content.startsWith('!play')) {
+  // play youtube audio command
+  // Voice only works in guilds, if the message does not come from a guild we ignore it
+  if (message.guild && command.startsWith('!play')) {
     // check if a valid query has been made
-    var query = message.content.substr(5);
+    const query = message.content.substr(5);
+    const voiceCon = message.guild.voiceConnection; // relevant voiceCon if client is connected to any voice channel in this guild
     if(query === '') {
-        message.reply('Usage: !play <title>');
-        return;
+        message.channel.send('Usage: !play <title>');
+    }
+    else if(!message.member.voiceChannel) {
+        message.channel.send("You need to join a voice channel first!");
+    }
+    else if(voiceCon != null && voiceCon.channel.id != message.member.voiceChannelID) {
+        message.channel.send("You need to be in the same voice channel as me to use this command");
     }
     else {
-       var videoURL;
-       var data = '';
+       message.channel.send("🔍 Searching YouTube for`" + query + "`");
        https.get("https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=3&q="+
                   query+"&key={ YOUR API KEY }", (resp) => {
+
+           let data = '';
+           // get the JSON data
            resp.on('data', (chunk) => {
               data += chunk;
            });
 
            // The whole response has been received. Print out the result.
            resp.on('end', () => {
-                videoURL = 'https://www.youtube.com/watch?v=' + JSON.parse(data).items[0].id.videoId;
-                // message.channel.send("Searching YouTube for `" + query + "`");
-           });
+                if(JSON.parse(data).items.length == 0) {
+                    message.channel.send("No results were found :upside_down:");
+                    return;
+                }
+                const videoURL = 'https://www.youtube.com/watch?v=' + JSON.parse(data).items[0].id.videoId;
+                const channelURL = "https://www.youtube.com/channel/" + JSON.parse(data).items[0].snippet.channelId;
+                const channelTitle = JSON.parse(data).items[0].snippet.channelTitle;
+                // Only try to join the sender's voice channel if they are in one themselves
+                  message.member.voiceChannel.join()
+                    .then(connection => { // Connection is an instance of VoiceConnection
+                        message.channel.send("► Playing `" + JSON.parse(data).items[0].snippet.title + "`");
 
+                        const stream = ytdl(videoURL, { quality: 'highestaudio', filter : 'audioonly' } );
+                        const dispatcher = connection.playStream(stream);
+            
+                        const myCallback = function (err, info) {
+                            if (err) throw err;
+
+                            let time = getDurationString(info.length_seconds);
+                             const embed = new RichEmbed()
+                                .setTitle(JSON.parse(data).items[0].snippet.title)
+                                .setURL(videoURL)
+                                .setColor(0x000000)
+                                .setImage(JSON.parse(data).items[0].snippet.thumbnails.medium.url)
+                                .addField("Channel", "[" + channelTitle + "](" + channelURL + ")", true)
+                                .addField("Song Duration", time, true);
+
+                            message.channel.send(embed);             
+                        };
+
+                        ytdl.getBasicInfo(videoURL, myCallback);
+
+                        dispatcher.on('end', () => {
+                            connection.disconnect();
+                        });
+                    })
+                    .catch(console.error);
+                
+           });
           }).on("error", (err) => {
             console.log("Error: " + err.message);
           });
-
-        // Only try to join the sender's voice channel if they are in one themselves
-        if (message.member.voiceChannel) {
-          message.member.voiceChannel.join()
-            .then(connection => { // Connection is an instance of VoiceConnection
-                message.channel.send("► Playing `" + JSON.parse(data).items[0].snippet.title + "`");
-
-                const stream = ytdl(videoURL, { quality: 'highestaudio', filter : 'audioonly' } );
-                const dispatcher = connection.playStream(stream, streamOptions);
-    
-                var myCallback = function (err, info) {
-                    if (err) throw err;
-
-                    var time = getDurationString(info.length_seconds);
-                     const embed = new RichEmbed()
-                        .setTitle(JSON.parse(data).items[0].snippet.title)
-                        .setURL(videoURL)
-                        .setColor(0x000000)
-                        .setImage(JSON.parse(data).items[0].snippet.thumbnails.medium.url)
-                        .addField("Channel", JSON.parse(data).items[0].snippet.channelTitle, true)
-                        .addField("Song Duration", time, true);
-
-                    message.channel.send(embed);             
-                };
-
-                ytdl.getBasicInfo(videoURL, myCallback);
-
-                dispatcher.on('end', () => {
-                    connection.disconnect();
-                });
-            })
-            .catch(console.error);
-        } else {
-          message.reply('You need to join a voice channel first!');
-        }
     }
   }
-});
 
-// help command
-client.on('message', message => {
-  if (message.content === '!help') {
+  // help command
+  if (command === '!help') {
     const embed = new RichEmbed()
       .setTitle('Scrap Help')
       .setColor(0x5DADE2)
