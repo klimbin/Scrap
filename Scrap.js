@@ -2,14 +2,61 @@ const { Client, RichEmbed , Attachment } = require('discord.js');
 const https = require('https');
 const ytdl = require('ytdl-core');
 const client = new Client();
+let queue = [];
+let queueTitles = [];
+let stream;
+let dispatcher;
 
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
 });
 
+function playQueue(message) {
+    let videos = queue.shift();
+    queueTitles.shift();
+    message.channel.send("► Playing `" + videos[0].snippet.title + "`");
+
+    // Only try to join the sender's voice channel if they are in one themselves
+    message.member.voiceChannel.join()
+        .then(connection => { // Connection is an instance of VoiceConnection
+            const videoURL = 'https://www.youtube.com/watch?v=' + videos[0].id.videoId;
+            const channelURL = "https://www.youtube.com/channel/" + videos[0].snippet.channelId;
+            const channelTitle = videos[0].snippet.channelTitle;
+
+            console.log("playing " + videos[0].snippet.title);
+            stream = ytdl(videoURL, { quality: 'highestaudio', filter : 'audioonly' } );
+            dispatcher = connection.playStream(stream, { passes: 3, volume: 0.5 } );
+
+            const myCallback = function (err, info) {
+                if (err) throw err;
+
+                let time = getDurationString(info.length_seconds);
+                 const embed = new RichEmbed()
+                    .setTitle(videos[0].snippet.title)
+                    .setURL(videoURL)
+                    .setColor(0x000000)
+                    .setImage(videos[0].snippet.thumbnails.medium.url)
+                    .addField("Channel", "[" + channelTitle + "](" + channelURL + ")", true)
+                    .addField("Song Duration", time, true);
+
+                message.channel.send(embed);             
+            };
+
+            ytdl.getBasicInfo(videoURL, myCallback);
+            
+            dispatcher.on('end', () => {
+                if(queue.length != 0)
+                    playQueue(message);
+                else
+                    connection.disconnect();
+            });
+
+        })
+        .catch(console.error);
+}
+
 client.on('message', message => {
   const command = message.content;
-  let queue = [];
 
   // command to roll dice
   if (command === '!roll') {
@@ -26,25 +73,55 @@ client.on('message', message => {
     message.channel.send(result);
   }
 
-  // play youtube audio command
+  if(command === '!queue') {
+    if(queue.length == 0)
+        message.channel.send("No songs in queue.");
+    else {
+        let msg = '```';
+        for(let i = 0; i < queueTitles.length; i++) {
+            msg += "\n" + (i+1) + ": " + queueTitles[i];
+        }
+        msg += '```';
+        message.channel.send(msg);
+    }
+  }
+
+  if(command == '!skip') {
+    if(dispatcher != null) {
+        stream.destroy();
+        dispatcher.end("song skipped");
+    }
+  }
+
+  if (command.startsWith('!volume')) {
+    const vol = message.content.substr(8);
+    if(vol.length > 0 && !isNaN(vol) && vol >= 0 && vol <= 1) {
+        dispatcher.setVolume(vol);
+        message.channel.send("Volume is now " + vol);
+    }
+    else {
+        message.channel.send("Please enter a number between 0 and 1.")
+    }
+  }
+
+  // command to play youtube audio
   // Voice only works in guilds, if the message does not come from a guild we ignore it
   if (message.guild && command.startsWith('!play')) {
     // check if a valid query has been made
-    const query = message.content.substr(5);
-    const voiceCon = message.guild.voiceConnection; // relevant voiceCon if client is connected to any voice channel in this guild
+    const query = message.content.substr(6);
+    const guild = message.guild; // relevant voiceCon if client is connected to any voice channel in this guild
     if(query === '') {
-        message.channel.send('Usage: !play <title>');
+        message.channel.send('❌ Usage: !play <song>');
     }
-    else if(!message.member.voiceChannel) {
-        message.channel.send("You need to join a voice channel first!");
+    else if(!message.member.voiceChannel || message.member.voiceChannelID == guild.afkChannelID) {
+        message.channel.send("❌ You need to join a voice channel first!");
     }
-    else if(voiceCon != null && voiceCon.channel.id != message.member.voiceChannelID) {
-        message.channel.send("You need to be in the same voice channel as me to use this command");
+    else if(guild.voiceConnection != null && guild.voiceConnection.channel.id != message.member.voiceChannelID) {
+        message.channel.send("❌ You need to be in the same voice channel as me to use this command.");
     }
     else {
-       message.channel.send("🔍 Searching YouTube for`" + query + "`");
-       https.get("https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=3&q="+
-                  query+"&key={ YOUR API KEY }", (resp) => {
+       https.get("https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&q="+query
+        +"&type=video&key={ YOUR API KEY }", (resp) => {
 
            let data = '';
            // get the JSON data
@@ -54,44 +131,20 @@ client.on('message', message => {
 
            // The whole response has been received. Print out the result.
            resp.on('end', () => {
-                if(JSON.parse(data).items.length == 0) {
-                    message.channel.send("No results were found :upside_down:");
+                const videos = JSON.parse(data).items;
+                if(videos.length == 0) {
+                    message.channel.send("No results were found 🙃");
                     return;
                 }
-                const videoURL = 'https://www.youtube.com/watch?v=' + JSON.parse(data).items[0].id.videoId;
-                const channelURL = "https://www.youtube.com/channel/" + JSON.parse(data).items[0].snippet.channelId;
-                const channelTitle = JSON.parse(data).items[0].snippet.channelTitle;
-                // Only try to join the sender's voice channel if they are in one themselves
-                  message.member.voiceChannel.join()
-                    .then(connection => { // Connection is an instance of VoiceConnection
-                        message.channel.send("► Playing `" + JSON.parse(data).items[0].snippet.title + "`");
 
-                        const stream = ytdl(videoURL, { quality: 'highestaudio', filter : 'audioonly' } );
-                        const dispatcher = connection.playStream(stream);
-            
-                        const myCallback = function (err, info) {
-                            if (err) throw err;
+                queueTitles.push(videos[0].snippet.title);
+                queue.push(videos);
+                if(dispatcher != null && !dispatcher.destroyed)
+                    message.channel.send("Added `" + videos[0].snippet.title + "` to the queue.");
+                else
+                    playQueue(message);
 
-                            let time = getDurationString(info.length_seconds);
-                             const embed = new RichEmbed()
-                                .setTitle(JSON.parse(data).items[0].snippet.title)
-                                .setURL(videoURL)
-                                .setColor(0x000000)
-                                .setImage(JSON.parse(data).items[0].snippet.thumbnails.medium.url)
-                                .addField("Channel", "[" + channelTitle + "](" + channelURL + ")", true)
-                                .addField("Song Duration", time, true);
-
-                            message.channel.send(embed);             
-                        };
-
-                        ytdl.getBasicInfo(videoURL, myCallback);
-
-                        dispatcher.on('end', () => {
-                            connection.disconnect();
-                        });
-                    })
-                    .catch(console.error);
-                
+                // message.channel.send("🔍 Searching YouTube for `" + query + "`");               
            });
           }).on("error", (err) => {
             console.log("Error: " + err.message);
@@ -103,9 +156,9 @@ client.on('message', message => {
   if (command === '!help') {
     const embed = new RichEmbed()
       .setTitle('Scrap Help')
-      .setColor(0x5DADE2)
+      .setColor(0x000000)
       .setDescription('*command list...*')
-      .addField("Audio Commands", "`!play <title>`")
+      .addField("Audio Commands", "`!play <song>` `!volume` `!queue` `!skip`")
       .addField("Random Commands", "`!roll` `!flip`")
     // Send the embed to the same channel as the message
     message.channel.send(embed);
@@ -118,19 +171,25 @@ function getDurationString(seconds) {
     var result = "";
     var hrs;
     var mins;
-    var secs = seconds % 60;
+    var secs = "" + seconds % 60;
 
     if (seconds > 3600) {
         hrs = Math.floor(seconds / 3600) + ":";
         result += hrs;
     }
-    if(seconds > 60) {
+    else if(seconds > 60) {
         mins = Math.floor(seconds / 60) % 60 + ":";
         if(hrs != null && mins.length < 3)
             mins = "0" + mins;
-        result += mins;
     }
-    result += secs;
+    else {
+        mins = "0:";
+    }
+
+    if(secs.length < 2)
+        secs = "0" + secs;
+
+    result += mins + secs;
     return result;
 }
 
