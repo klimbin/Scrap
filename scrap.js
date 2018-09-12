@@ -57,7 +57,7 @@ function play(connection, message) {
     });
 }
 
-client.login(TOKEN);
+client.login(process.env.TOKEN);
 
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);

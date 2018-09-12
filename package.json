@@ -2,7 +2,7 @@
   "name": "Scrap",
   "version": "1.0.0",
   "description": "a discord bot",
-  "main": "index.js",
+  "main": "scrap.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
