@@ -87,7 +87,7 @@ client.on('message', message => {
             else {
                 var query;
                 if(args[1].includes('https://www.youtube.com/watch?v=')) {
-                    query = args[1].substring('https://www.youtube.com/watch?v='.length);
+                    query = args[1].substring('https://www.youtube.com/watch?'.length);
                 }
                 else {
                     query = message.content.substring(5);
