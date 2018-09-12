@@ -28,7 +28,7 @@ function play(connection, message) {
     const channelTitle = videos[0].snippet.channelTitle;
 
     console.log("playing " + videos[0].snippet.title);
-    server.dispatcher = connection.playStream(ytdl(videoURL, { quality: 'highestaudio', filter : 'audioonly' } ), { passes: 8, volume: 0.5 } );
+    server.dispatcher = connection.playStream(ytdl(videoURL, { quality: 'highestaudio', filter : 'audioonly' } ), { volume: 0.5 } );
 
     const myCallback = function (err, info) {
         if (err) throw err;
