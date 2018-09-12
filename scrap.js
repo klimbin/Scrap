@@ -19,7 +19,6 @@ var servers = {};
 
 function play(connection, message) {
     var server = servers[message.guild.id];
-
     let videos = server.queue.shift();
     server.queueTitles.shift();
 
@@ -48,7 +47,6 @@ function play(connection, message) {
 
     ytdl.getBasicInfo(videoURL, myCallback);
 
-
     server.dispatcher.on("end", function() {
         if (server.queue[0])
             play(connection, message);
@@ -64,7 +62,6 @@ client.on('ready', () => {
 });
 
 client.on('message', message => {
-
     if (!servers[message.guild.id]) {
         console.log("adding object for queue data on server: " + message.guild.id);
         servers[message.guild.id] = { queue: [], queueTitles: [] };
@@ -117,7 +114,7 @@ client.on('message', message => {
                         server.queue.push(videos);
                         server.queueTitles.push(videos[0].snippet.title);
 
-                        if(server.dispatcher) {
+                        if(server.dispatcher != undefined && !server.dispatcher.destroyed) {
                             message.channel.send("Added `" + videos[0].snippet.title + "` to the queue.");
                         }
                         else {
@@ -154,8 +151,9 @@ client.on('message', message => {
             break;
         case "stop":
             if (message.guild.voiceConnection) {
-                server.queue = []; // clear queue
+                server.queue.length = 0; // clear queue
                 server.dispatcher.end();
+                console.log("stopped the queue on server: " + message.guild.id);
             }
             break;
         case "volume":
