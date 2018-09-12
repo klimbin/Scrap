@@ -64,12 +64,18 @@ client.on('ready', () => {
 });
 
 client.on('message', message => {
+
+    if (!servers[message.guild.id]) {
+        console.log("adding object for queue data on server: " + message.guild.id);
+        servers[message.guild.id] = { queue: [], queueTitles: [] };
+    }
+
     if (message.author.equals(client.user)) return;
 
     if (!message.content.startsWith(PREFIX)) return;
 
     var args = message.content.substring(PREFIX.length).split(" ");
-
+    var server = servers[message.guild.id];
     switch (args[0].toLowerCase()) {
         case "play":
             if (!args[1]) {
@@ -108,13 +114,6 @@ client.on('message', message => {
                             return;
                         }
 
-                        if (!servers[message.guild.id]) {
-                            console.log("adding queue objects for server: " + message.guild.id);
-                            servers[message.guild.id] = { queue: [], queueTitles: [] };
-                        }
-
-                        var server = servers[message.guild.id];
-
                         server.queue.push(videos);
                         server.queueTitles.push(videos[0].snippet.title);
 
@@ -137,8 +136,7 @@ client.on('message', message => {
             }
             break;
         case "queue":
-            var server = servers[message.guild.id];
-            if(server.queue.length == 0)
+            if (server.queue.length == 0)
                 message.channel.send("No songs in queue.");
             else {
                 let msg = '```';
@@ -150,20 +148,17 @@ client.on('message', message => {
             }
             break;
         case "skip":
-            var server = servers[message.guild.id];
             if (server.dispatcher) {
                 server.dispatcher.end("song skipped");
             }
             break;
         case "stop":
-            var server = servers[message.guild.id];
             if (message.guild.voiceConnection) {
                 server.queue = []; // clear queue
                 server.dispatcher.end();
             }
             break;
         case "volume":
-            var server = servers[message.guild.id];
             let vol = args[1];
             if(vol.length > 0 && !isNaN(vol) && vol >= 0 && vol <= 1) {
                 server.dispatcher.setVolume(vol);
