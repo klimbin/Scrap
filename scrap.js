@@ -158,7 +158,10 @@ client.on('message', message => {
             break;
         case "volume":
             let vol = args[1];
-            if(vol.length > 0 && !isNaN(vol) && vol >= 0 && vol <= 1) {
+            if(vol == undefined) {
+                message.channel.send("Current volume is " + server.dispatcher.volume);
+            }
+            else if(vol.length > 0 && !isNaN(vol) && vol >= 0 && vol <= 1) {
                 server.dispatcher.setVolume(vol);
                 message.channel.send("Volume is now " + vol);
             }
