@@ -2,8 +2,8 @@ const Discord = require('discord.js');
 const https = require('https');
 const ytdl = require('ytdl-core');
 
-const TOKEN = "{ YOUR BOT TOKEN }";
-const YOUTUBE_API_KEY = "{ YOUR API KEY }";
+// const TOKEN = "{ YOUR BOT TOKEN }";
+// const YOUTUBE_API_KEY = "{ YOUR API KEY }";
 const PREFIX = "!"; // command prefix
 
 const client = new Discord.Client();
@@ -92,7 +92,7 @@ client.on('message', message => {
 
                 console.log("users query: " + query);
                 https.get("https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&q="+query
-                +"&type=video&key="+YOUTUBE_API_KEY, (resp) => {
+                +"&type=video&key="+process.env.YOUTUBE_API_KEY, (resp) => {
 
                     let data = '';
                     // get the JSON data
