@@ -1,1 +1,1 @@
-worker: node Scrap.js
+worker: node scrap.js
